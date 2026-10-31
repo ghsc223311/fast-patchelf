@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+from pwn import *
+import os
+
+BIN_PATH = @BIN_PATH@
+LIBC_PATH = @LIBC_PATH@
+LD_PATH = @LD_PATH@
+
+HOST = args.HOST or @HOST@
+PORT = int(args.PORT or @PORT@)
+
+elf = context.binary = ELF(BIN_PATH, checksec=False)
+libc = ELF(LIBC_PATH, checksec=False)
+context.os = 'linux'
+context.log_level = 'debug' if args.DEBUG else 'info'
+context.terminal = ['tmux', 'splitw', '-h']
+
+# python3 exp.py / python3 exp.py REMOTE HOST=example.org PORT=31337
+choice = 1 if args.REMOTE else 0
+if choice:
+    if not HOST or not 1 <= PORT <= 65535:
+        log.error('請設定 HOST 和 PORT，例如 REMOTE HOST=example.org PORT=31337')
+    p = remote(HOST, PORT)
+else:
+    p = process([BIN_PATH], env={k: v for k, v in os.environ.items()
+                               if k not in ('LD_PRELOAD', 'LD_LIBRARY_PATH', 'LD_AUDIT')})
+
+s       = lambda data: p.send(data)
+sl      = lambda data: p.sendline(data)
+sa      = lambda x, data: p.sendafter(x, data)
+sla     = lambda x, data: p.sendlineafter(x, data)
+r       = lambda num=4096: p.recv(num)
+rl      = lambda: p.recvline()
+ru      = lambda x: p.recvuntil(x)
+itr     = lambda: p.interactive()
+uu32    = lambda data: u32(data.ljust(4, b'\x00'))
+uu64    = lambda data: u64(data.ljust(8, b'\x00'))
+uru64   = lambda: uu64(ru(b'\x7f')[-6:])  # 僅用於常見 amd64 六位元組洩漏
+leak    = lambda name, value: log.success('{} = {:#x}'.format(name, value))
+
+libc_base = 0  # 洩漏後填寫，例如：libc_base = leaked_puts - libc.sym['puts']
+libc_os = lambda offset: libc_base + offset
+libc_sym = lambda name: libc_os(libc.sym[name])
+
+
+def get_sb(base):
+    return base + libc.sym['system'], base + next(libc.search(b'/bin/sh\x00'))
+
+
+def debug(cmd=''):
+    if choice or not args.GDB:
+        return
+    gdb.attach(p, gdbscript=cmd)
+    pause()  # 設好斷點後，回此終端按 Enter
+
+
+commend = '''
+# 有 main 符號時可填：b main
+continue
+'''
+debug(commend)
+
+# 在此編寫題目的互動與利用流程
+itr()

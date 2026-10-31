@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pwn-init-*/
+
+# Local work notes
+/task_plan.md
+/findings.md
+/progress.md
+/.planning/
+
+# Generated challenge artifacts
+/exp.py
+*_patched
+*.pwn.json
